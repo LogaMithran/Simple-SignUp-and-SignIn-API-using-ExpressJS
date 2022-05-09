@@ -88,8 +88,8 @@ function inserttoken(inserobg) {
         var randomtoken = "Bearer "
         randomtoken += token
         var tokenobj = { randomtoken: randomtoken }
-        var database = db.db("userlogindetails");
-        database.collection("userlogindetails").insertOne(tokenobj, function (req, res) {
+        var database = db.db("userdetails");
+        database.collection("tokendetails").insertOne(tokenobj, function (req, res) {
             if (err) {
                 console.log(err);
             }
