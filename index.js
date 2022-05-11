@@ -4,7 +4,6 @@ const http = require("http")
 const jwt = require("jsonwebtoken")
 var mongoclient = require("mongodb").MongoClient
 var bodyparser = require("body-parser");
-const { parse } = require("path");
 var dburl = "mongodb://localhost:27017/";
 body = bodyparser.urlencoded({ extended: true });
 const app = express()
