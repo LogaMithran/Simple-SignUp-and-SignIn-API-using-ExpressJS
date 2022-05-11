@@ -110,7 +110,7 @@ app.post("/user/signin/login", body, function (req, res) {
                     let randomtoken = authtoken
                     jwt.verify(randomtoken, "signup", (err, data) => {
                         if (err) {
-                            throw err
+                            flag=false
                         }
                         else {
                             let token_password = data.inserobg.password
@@ -156,7 +156,7 @@ function callsigninpage(flag, res) {
 // })
 function inserttoken(inserobg, username) {
     mongoclient.connect(dburl, function (err, db) {
-        jwt.sign({ inserobg }, "signup", (err, token) => {
+        jwt.sign({ inserobg }, "signup", { expiresIn: 180 }, (err, token) => {
             var randomtoken = "Bearer "
             randomtoken += token
             var tokenobj = { randomtoken: randomtoken, username: username }
