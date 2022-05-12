@@ -1,6 +1,4 @@
 const express = require("express")
-const jwt_decode = require('jwt-decode')
-const http = require("http")
 const jwt = require("jsonwebtoken")
 var mongoclient = require("mongodb").MongoClient
 var bodyparser = require("body-parser");
@@ -38,10 +36,7 @@ app.post("/user/signup/register", body, function (req, res) {
     var flag
 
     mongoclient.connect(dburl, function (err, db) {
-        if (err) {
-            console.log(err);
-        }
-        else {
+        if (password == confirmpassword) {
             var database = db.db("userdetails");
             var srcObj = { username: username, email: email };
             database.collection("userdetails").find(srcObj).toArray(function (err, result) {
@@ -65,18 +60,22 @@ app.post("/user/signup/register", body, function (req, res) {
                                 inserttoken(inserobg, username)
                             }
                         });
-                        flag=true
+                        flag = true
                     }
-                    callsignuppage(flag,res)
                 }
+                callsignuppage(flag, res)
             });
         }
-        
+        else {
+            flag = false
+        }
+        console.log(flag)
+        callsignuppage(flag, res)
     });
 
 });
 
-function callsignuppage(flag,res){
+function callsignuppage(flag, res) {
     if (flag == true) {
         res.redirect('/src/sucesssignuppage.html')
         res.end();
@@ -100,17 +99,21 @@ app.post("/user/signin/login", body, function (req, res) {
             var srcObj = { username: username };
             database.collection("tokendetails").find(srcObj).toArray(function (err, result) {
                 if (err) {
-                    console.log(err);
+                    // console.log(err);
+                    flag = false
+                    console.log("User not found")
                 }
-                else {
+                else if (result.length > 0) {
                     let db_username = result[0].username
                     let token = result[0].randomtoken
                     const bearer = token.split(' ')
                     const authtoken = bearer[1]
                     let randomtoken = authtoken
+
                     jwt.verify(randomtoken, "signup", (err, data) => {
                         if (err) {
-                            flag=false
+                            flag = false
+                            console.log("Token expired")
                         }
                         else {
                             let token_password = data.inserobg.password
@@ -122,8 +125,12 @@ app.post("/user/signin/login", body, function (req, res) {
                             }
                         }
                     })
-                    callsigninpage(flag, res)
                 }
+                else {
+                    flag = false
+                    console.log("User not found")
+                }
+                callsigninpage(flag, res)
             });
         }
     });
@@ -140,23 +147,23 @@ function callsigninpage(flag, res) {
     }
 }
 
-// app.post("/user/signin/login", verifytoken, (req, res) => {
-//     jwt.verify(req.token, "signup", (err, data) => {
-//         if (err) {
-//             res.sendStatus(403)
-//         }
-//         else {
-//             // res.redirect("./src/successpage.html")
-//             console.log(data)
-//             res.json({
-//                 data
-//             })
-//         }
-//     })
-// })
+app.post("/signin", verifytoken, (req, res) => {
+    jwt.verify(req.token, "signup", (err, data) => {
+        if (err) {
+            res.sendStatus(403)
+        }
+        else {
+            console.log(data)
+            res.json({
+                data
+            })
+        }
+    })
+})
+
 function inserttoken(inserobg, username) {
     mongoclient.connect(dburl, function (err, db) {
-        jwt.sign({ inserobg }, "signup", { expiresIn: 180 }, (err, token) => {
+        jwt.sign({ inserobg }, "signup", { expiresIn: 300 }, (err, token) => {
             var randomtoken = "Bearer "
             randomtoken += token
             var tokenobj = { randomtoken: randomtoken, username: username }
@@ -177,18 +184,18 @@ function inserttoken(inserobg, username) {
 
 
 
-// app.post("/signup",(req,res)=>{
-//     const sampleuser={
-//         id: 1,
-//         name: "kannan",
-//     }
-//     // console.log(req.body.username)
-//     jwt.sign({sampleuser}, "signup" ,{expiresIn: 20}  , (err,token)=>{
-//         res.json({
-//             token
-//         })
-//     })
-// })
+app.post("/signup", (req, res) => {
+    const sampleuser = {
+        id: 1,
+        name: "logamithran",
+        email: "logamithran2001@gmail.com"
+    }
+    jwt.sign({ sampleuser }, "signup", { expiresIn: 20 }, (err, token) => {
+        res.json({
+            token
+        })
+    })
+})
 
 
 app.listen(5000, () => {
@@ -196,16 +203,16 @@ app.listen(5000, () => {
 })
 
 
-// function verifytoken(req, res, next) {
-//     const bearerheader = req.headers['authorization']
-//     console.log(req)
-//     if (bearerheader !== undefined) {
-//         const bearer = bearerheader.split(' ')
-//         const authtoken = bearer[1]
-//         req.token = authtoken
-//         next();
-//     }
-//     else {
-//         res.sendStatus(403)
-//     }
-// }
+function verifytoken(req, res, next) {
+    const bearerheader = req.headers['authorization']
+    console.log(req)
+    if (bearerheader !== undefined) {
+        const bearer = bearerheader.split(' ')
+        const authtoken = bearer[1]
+        req.token = authtoken
+        next();
+    }
+    else {
+        res.sendStatus(403)
+    }
+}
