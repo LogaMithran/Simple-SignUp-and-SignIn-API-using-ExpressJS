@@ -1,8 +1,11 @@
+//index js file using only asyn and await
 const express = require("express")
 const jwt = require("jsonwebtoken")
 var mongoclient = require("mongodb").MongoClient
 var bodyparser = require("body-parser");
+const res = require("express/lib/response");
 var dburl = "mongodb://localhost:27017/";
+var validate=require("./validators")
 body = bodyparser.urlencoded({ extended: true });
 const app = express()
 
@@ -28,191 +31,58 @@ app.get("/src/failsignuppage.html", function (req, res) {
 });
 
 app.post("/user/signup/register", body, function (req, res) {
-    var username = req.body.username;
-    var password = req.body.password;
-    var confirmpassword = req.body.confirmpassword;
-    var email = req.body.email;
-    var phoneno = req.body.phoneno;
-    var flag
-
-    mongoclient.connect(dburl, function (err, db) {
-        if (password == confirmpassword) {
-            var database = db.db("userdetails");
-            var srcObj = { username: username, email: email };
-            database.collection("userdetails").find(srcObj).toArray(function (err, result) {
-                if (err) {
-                    console.log(err);
-                }
-                else {
-                    if (result.length != 0) {
-                        console.log("User already present")
-                        flag = false
-                    }
-                    else {
-                        var inserobg = { username: username, password: password, confirmpassword: confirmpassword, email: email, phoneno: phoneno };
-                        database.collection("userdetails").insertOne(inserobg, function (req, res) {
-                            if (err) {
-                                console.log(err);
-                            }
-                            else {
-                                console.log("Inserted successfully");
-                                db.close();
-                                inserttoken(inserobg, username)
-                            }
-                        });
-                        flag = true
-                    }
-                }
-                callsignuppage(flag, res)
-            });
-        }
-        else {
-            flag = false
-        }
-        console.log(flag)
-        callsignuppage(flag, res)
-    });
-
+    let username = req.body.username;
+    let password = req.body.password;
+    let confirmpassword = req.body.confirmpassword;
+    let email = req.body.email;
+    let phoneno = req.body.phoneno;
+    let flag
+    let srcObj = { username: username, email: email };
+    let inserobg = { username: username, password: password, confirmpassword: confirmpassword, email: email, phoneno: phoneno };
+    (validate.validatepassword(req) && validate.validateemail(req)) ? insertUser(srcObj, inserobg, res) : res.write("<h1>Password doesn't match with confirm password</h1>")
 });
 
-function callsignuppage(flag, res) {
-    if (flag == true) {
-        res.redirect('/src/sucesssignuppage.html')
-        res.end();
+async function insertUser(srcObj, inserobg, res) {
+    const result = await mongoclient.connect(dburl);
+    let database = result.db("userdetails");
+    let checkUser = await database.collection("userdetails").find(srcObj).toArray();
+    if (checkUser.length != 0) {
+        res.send("User already present")
     }
-    if (flag == false) {
-        res.redirect('/src/failsignuppage.html')
-        res.end();
+    else {
+        let insertStatus = await database.collection("userdetails").insertOne(inserobg);
+        insertStatus.acknowledged ? inserttoken(inserobg, inserobg.username, res) : res.send("Some error has occured")
     }
 }
 
-app.post("/user/signin/login", body, function (req, res) {
+async function inserttoken(inserobg, username, res) {
+    const result = await mongoclient.connect(dburl);
+    let database = result.db("userdetails");
+    let token = await jwt.sign({ inserobg }, "signup");
+    var tokenobj = { randomtoken: token, username: username }
+    await database.collection("tokendetails").insertOne(tokenobj) ?
+        res.send("User and their token has been inserted successfully")
+        :
+        res.send("Some error has been occured")
+}
+
+app.post("/user/signin/login", body, async function (req, res) {
+    const mdatabase = await mongoclient.connect(dburl);
+    var database = mdatabase.db("userdetails");
     var username = req.body.username;
-    var password = req.body.password;
-    var flag
-    mongoclient.connect(dburl, function (err, db) {
-        if (err) {
-            console.log(err);
-        }
-        else {
-            var database = db.db("userdetails");
-            var srcObj = { username: username };
-            database.collection("tokendetails").find(srcObj).toArray(function (err, result) {
-                if (err) {
-                    // console.log(err);
-                    flag = false
-                    console.log("User not found")
-                }
-                else if (result.length > 0) {
-                    let db_username = result[0].username
-                    let token = result[0].randomtoken
-                    const bearer = token.split(' ')
-                    const authtoken = bearer[1]
-                    let randomtoken = authtoken
-
-                    jwt.verify(randomtoken, "signup", (err, data) => {
-                        if (err) {
-                            flag = false
-                            console.log("Token expired")
-                        }
-                        else {
-                            let token_password = data.inserobg.password
-                            if (db_username == username && token_password == password) {
-                                flag = true
-                            }
-                            else {
-                                flag = false
-                            }
-                        }
-                    })
-                }
-                else {
-                    flag = false
-                    console.log("User not found")
-                }
-                callsigninpage(flag, res)
-            });
-        }
-    });
+    var srcObj = { username: username };
+    let findresult = await database.collection("tokendetails").find(srcObj).toArray();
+    findresult.length>0 ? authenticatetoken(findresult[0].username,findresult[0].randomtoken,req,res) : res.send("User not found in the database")
 });
+async function authenticatetoken(db_username , token, req,res){
 
-function callsigninpage(flag, res) {
-    if (flag == true) {
-        res.redirect('/src/successpage.html')
-        res.end();
-    }
-    if (flag == false) {
-        res.redirect('/src/failpage.html')
-        res.end();
-    }
+    let checkvalidation = await jwt.verify(token, "signup")
+    let token_password = checkvalidation.inserobg.password
+    db_username ===  req.body.username && token_password ===  req.body.password ? 
+    res.send("User has been successfully signed In"):
+    res.send("Please provide your correct password")
 }
-
-app.post("/signin", verifytoken, (req, res) => {
-    jwt.verify(req.token, "signup", (err, data) => {
-        if (err) {
-            res.sendStatus(403)
-        }
-        else {
-            console.log(data)
-            res.json({
-                data
-            })
-        }
-    })
-})
-
-function inserttoken(inserobg, username) {
-    mongoclient.connect(dburl, function (err, db) {
-        jwt.sign({ inserobg }, "signup", { expiresIn: 300 }, (err, token) => {
-            var randomtoken = "Bearer "
-            randomtoken += token
-            var tokenobj = { randomtoken: randomtoken, username: username }
-            var database = db.db("userdetails");
-            database.collection("tokendetails").insertOne(tokenobj, function (req, res) {
-                if (err) {
-                    console.log(err);
-                }
-                else {
-                    console.log("User Inserted successfully");
-                    db.close();
-                }
-            });
-        })
-    })
-    return true
-}
-
-
-
-app.post("/signup", (req, res) => {
-    const sampleuser = {
-        id: 1,
-        name: "logamithran",
-        email: "logamithran2001@gmail.com"
-    }
-    jwt.sign({ sampleuser }, "signup", { expiresIn: 20 }, (err, token) => {
-        res.json({
-            token
-        })
-    })
-})
-
 
 app.listen(5000, () => {
     console.log("server listening in the port address 5000")
 })
-
-
-function verifytoken(req, res, next) {
-    const bearerheader = req.headers['authorization']
-    console.log(req)
-    if (bearerheader !== undefined) {
-        const bearer = bearerheader.split(' ')
-        const authtoken = bearer[1]
-        req.token = authtoken
-        next();
-    }
-    else {
-        res.sendStatus(403)
-    }
-}

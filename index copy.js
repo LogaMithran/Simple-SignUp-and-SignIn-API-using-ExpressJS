@@ -1,5 +1,5 @@
+//index file using callbacks only
 const express = require("express")
-const http = require("http")
 const jwt = require("jsonwebtoken")
 var mongoclient = require("mongodb").MongoClient
 var bodyparser = require("body-parser");
@@ -15,70 +15,146 @@ app.get("/user/signin", function (req, res) {
 app.get("/user/signup", function (req, res) {
     res.sendFile(__dirname + "/src/signup.html")
 });
-app.get("src/successpage", function (req, res) {
+app.get("/src/successpage.html", function (req, res) {
     res.sendFile(__dirname + "/src/successpage.html")
 });
+app.get("/src/failpage.html", function (req, res) {
+    res.sendFile(__dirname + "/src/failpage.html")
+});
+app.get("/src/sucesssignuppage.html", function (req, res) {
+    res.sendFile(__dirname + "/src/sucesssignuppage.html")
+});
+app.get("/src/failsignuppage.html", function (req, res) {
+    res.sendFile(__dirname + "/src/failsignuppage.html")
+});
+
 app.post("/user/signup/register", body, function (req, res) {
+    var username = req.body.username;
+    var password = req.body.password;
+    var confirmpassword = req.body.confirmpassword;
+    var email = req.body.email;
+    var phoneno = req.body.phoneno;
+    var flag
+
+    mongoclient.connect(dburl, function (err, db) {
+        if (password == confirmpassword) {
+            var database = db.db("userdetails");
+            var srcObj = { username: username, email: email };
+            database.collection("userdetails").find(srcObj).toArray(function (err, result) {
+                if (err) {
+                    console.log(err);
+                }
+                else {
+                    if (result.length != 0) {
+                        console.log("User already present")
+                        flag = false
+                    }
+                    else {
+                        var inserobg = { username: username, password: password, confirmpassword: confirmpassword, email: email, phoneno: phoneno };
+                        database.collection("userdetails").insertOne(inserobg, function (req, res) {
+                            if (err) {
+                                console.log(err);
+                            }
+                            else {
+                                console.log("Inserted successfully");
+                                db.close();
+                                inserttoken(inserobg, username)
+                            }
+                        });
+                        flag = true
+                    }
+                }
+                callsignuppage(flag, res)
+            });
+        }
+        else {
+            flag = false
+        }
+        console.log(flag)
+        callsignuppage(flag, res)
+    });
+
+});
+
+function callsignuppage(flag, res) {
+    if (flag == true) {
+        res.redirect('/src/sucesssignuppage.html')
+        res.end();
+    }
+    if (flag == false) {
+        res.redirect('/src/failsignuppage.html')
+        res.end();
+    }
+}
+
+app.post("/user/signin/login", body, function (req, res) {
+    var username = req.body.username;
+    var password = req.body.password;
+    var flag
     mongoclient.connect(dburl, function (err, db) {
         if (err) {
             console.log(err);
         }
         else {
-            var username = req.body.username;
-            var password = req.body.password;
-            var confirmpassword = req.body.confirmpassword;
-            var email = req.body.email;
-            var phoneno = req.body.phoneno;
-            mongoclient.connect(dburl, function (err, db) {
+            var database = db.db("userdetails");
+            var srcObj = { username: username };
+            database.collection("tokendetails").find(srcObj).toArray(function (err, result) {
                 if (err) {
-                    console.log(err);
+                    // console.log(err);
+                    flag = false
+                    console.log("User not found")
                 }
-                else {
-                    var database = db.db("userdetails");
-                    var srcObj = { username: username, email: email };
-                    database.collection("userdetails").find(srcObj).toArray(function (err, result) {
+                else if (result.length > 0) {
+                    let db_username = result[0].username
+                    let token = result[0].randomtoken
+                    const bearer = token.split(' ')
+                    const authtoken = bearer[1]
+                    let randomtoken = authtoken
+
+                    jwt.verify(randomtoken, "signup", (err, data) => {
                         if (err) {
-                            console.log(err);
+                            flag = false
+                            console.log("Token expired")
                         }
                         else {
-                            if (result.length!=0) {
-                                console.log("User already present")
+                            let token_password = data.inserobg.password
+                            if (db_username == username && token_password == password) {
+                                flag = true
                             }
                             else {
-                                var inserobg = { username: username, password: password, confirmpassword: confirmpassword, email: email, phoneno: phoneno };
-                                database.collection("userdetails").insertOne(inserobg, function (req, res) {
-                                    if (err) {
-                                        console.log(err);
-                                    }
-                                    else {
-                                        console.log("Inserted successfully");
-                                        db.close();
-                                        inserttoken(inserobg)
-                                    }
-                                });
+                                flag = false
                             }
-                            
                         }
-                    });
-        
+                    })
                 }
+                else {
+                    flag = false
+                    console.log("User not found")
+                }
+                callsigninpage(flag, res)
             });
         }
     });
-    res.end();
 });
 
+function callsigninpage(flag, res) {
+    if (flag == true) {
+        res.redirect('/src/successpage.html')
+        res.end();
+    }
+    if (flag == false) {
+        res.redirect('/src/failpage.html')
+        res.end();
+    }
+}
 
 app.post("/signin", verifytoken, (req, res) => {
-    console.log(req.body.username)
-    console.log(req.body.password)
-
     jwt.verify(req.token, "signup", (err, data) => {
         if (err) {
             res.sendStatus(403)
         }
         else {
-            res.redirect("./src/successpage.html")
+            console.log(data)
             res.json({
                 data
             })
@@ -86,40 +162,41 @@ app.post("/signin", verifytoken, (req, res) => {
     })
 })
 
-function inserttoken(inserobg) {
+function inserttoken(inserobg, username) {
     mongoclient.connect(dburl, function (err, db) {
-        jwt.sign({ inserobg }, "signup", { expiresIn: 120 }, (err, token) => {
-        var randomtoken = "Bearer "
-        randomtoken += token
-        var tokenobj = { randomtoken: randomtoken }
-        var database = db.db("userdetails");
-        database.collection("tokendetails").insertOne(tokenobj, function (req, res) {
-            if (err) {
-                console.log(err);
-            }
-            else {
-                console.log("User Inserted successfully");
-                db.close();
-            }
-        });
+        jwt.sign({ inserobg }, "signup", { expiresIn: 300 }, (err, token) => {
+            var randomtoken = "Bearer "
+            randomtoken += token
+            var tokenobj = { randomtoken: randomtoken, username: username }
+            var database = db.db("userdetails");
+            database.collection("tokendetails").insertOne(tokenobj, function (req, res) {
+                if (err) {
+                    console.log(err);
+                }
+                else {
+                    console.log("User Inserted successfully");
+                    db.close();
+                }
+            });
+        })
     })
-})
+    return true
 }
 
 
 
-// app.post("/signup",(req,res)=>{
-//     const sampleuser={
-//         id: 1,
-//         name: "kannan",
-//     }
-//     // console.log(req.body.username)
-//     jwt.sign({sampleuser}, "signup" ,{expiresIn: 20}  , (err,token)=>{
-//         res.json({
-//             token
-//         })
-//     })
-// })
+app.post("/signup", (req, res) => {
+    const sampleuser = {
+        id: 1,
+        name: "logamithran",
+        email: "logamithran2001@gmail.com"
+    }
+    jwt.sign({ sampleuser }, "signup", { expiresIn: 20 }, (err, token) => {
+        res.json({
+            token
+        })
+    })
+})
 
 
 app.listen(5000, () => {
@@ -129,7 +206,7 @@ app.listen(5000, () => {
 
 function verifytoken(req, res, next) {
     const bearerheader = req.headers['authorization']
-
+    console.log(req)
     if (bearerheader !== undefined) {
         const bearer = bearerheader.split(' ')
         const authtoken = bearer[1]
