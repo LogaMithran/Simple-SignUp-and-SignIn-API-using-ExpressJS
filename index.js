@@ -6,6 +6,7 @@ var bodyparser = require("body-parser");
 const res = require("express/lib/response");
 var dburl = "mongodb://localhost:27017/";
 var validate=require("./validators")
+var authenticator=require("./authenticator")
 body = bodyparser.urlencoded({ extended: true });
 const app = express()
 
@@ -72,16 +73,8 @@ app.post("/user/signin/login", body, async function (req, res) {
     var username = req.body.username;
     var srcObj = { username: username };
     let findresult = await database.collection("tokendetails").find(srcObj).toArray();
-    findresult.length>0 ? authenticatetoken(findresult[0].username,findresult[0].randomtoken,req,res) : res.send("User not found in the database")
+    findresult.length>0 ? authenticator.authenticatetoken(findresult[0].username,findresult[0].randomtoken,req,res) : res.send("User not found in the database")
 });
-async function authenticatetoken(db_username , token, req,res){
-
-    let checkvalidation = await jwt.verify(token, "signup")
-    let token_password = checkvalidation.inserobg.password
-    db_username ===  req.body.username && token_password ===  req.body.password ? 
-    res.send("User has been successfully signed In"):
-    res.send("Please provide your correct password")
-}
 
 app.listen(5000, () => {
     console.log("server listening in the port address 5000")
